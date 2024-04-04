@@ -1,4 +1,5 @@
 # Step 2: Import necessary libraries
+import os
 import spotipy
 import youtube_dl
 from spotipy.oauth2 import SpotifyOAuth
@@ -40,7 +41,8 @@ def main():
     display_playlist_info(selected_playlist)
     playlist_tracks = get_playlist_tracks(selected_playlist['id'])
     display_track_info(playlist_tracks)
-    download_audio_files(playlist_tracks)
+    download_folder = download_audio_files(playlist_tracks)  # Capture the value returned by download_audio_files()
+    list_downloaded_songs(download_folder)  # Call the function to list downloaded songs
 
 
 if __name__ == '__main__':
@@ -85,13 +87,51 @@ def search_song_on_youtube(song_name, artist_names):
 
 # Step 12: Download audio files for each song
 def download_audio_files(tracks):
+    download_folder = prompt_for_download_folder()
+    os.chdir(download_folder) # Change current working directory to the download folder
+    failed_songs = []  # List to keep track of failed songs
     for track in tracks:
         track_name = track['track']['name']
         artists = [artist['name'] for artist in track['track']['artists']]
         video_id = search_song_on_youtube(track_name, artists)
         if video_id:
-            print(f"Download {track_name}...")
+            print(f"Downloading {track_name}...")
             with youtube_dl.YoutubeDL({'format': 'bestaudio'}) as ydl:
-                ydl.download([f"httpls://www.youtube.come/watch?v={video_id}"])
+                try:
+                    ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+                except Exception as e:
+                    print(f"Failed to download {track_name}: {str(e)}")
+                    failed_songs.append(track_name)
         else:
             print(f"No audio found for {track_name}")
+            failed_songs.append(track_name)
+    
+    if failed_songs:
+        print("\nFailed to download the following songs:")
+        for song in failed_songs:
+            print(song)
+
+    return download_folder # Return the download folder
+
+
+# Step 13.1: Prompt the user for folder and set download location
+def prompt_for_download_folder():
+    while True:
+        folder_path = input("Enter the folder path where you want to save the downloaded songs: ")
+        if os.path.exists(folder_path) and os.path.isdir(folder_path):
+            return folder_path
+        else: 
+            print("Invalid folder path. Please enter a valid directory.")
+
+
+# Step 13.2: Create a folder to store downloaded songs
+def create_download_folder():
+    folder_path = prompt_for_download_folder()
+    return folder_path
+
+# Step 14: List downloaded songs in the specified folder
+def list_downloaded_songs(folder_path):
+    print("\nDownloaded Songs: ")
+    songs = os.listdir(folder_path)
+    for song in songs:
+        print(song)

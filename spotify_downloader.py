@@ -5,8 +5,8 @@ import yt_dlp as youtube_dl
 from spotipy.oauth2 import SpotifyOAuth
 
 # Define the Spotify API credentials
-client_id = 'a5430ef036c643b1831ab409a924a18b'
-client_secret = '2ed11f6bbe3c402caf58f51b48350f23'
+client_id = 'your_client_id'
+client_secret = 'your_client_secret'
 redirect_uri = 'http://localhost:8888/callback'
 
 # Authenticate with the Spotify API

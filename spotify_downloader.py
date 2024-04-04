@@ -17,15 +17,32 @@ def get_user_playlist():
     return playlists['items']
 
 # Step 6: Display the user's playlists
-def display_playlists(playlists):
+def select_playlist(playlists):
     print("Your Spotify Playlists: ")
     for index, playlist in enumerate(playlists, start=1):
         print(f"{index}. {playlist['name']}")
     
+    while True:
+        try:
+            choice = int(input("\nPlease enter the number of the playlist you want to select: "))
+            if 1 <= choice <= len(playlists):
+                return playlists[choice -1]
+            else:
+                print("Invalid choice. Please enter a number corresponding to the playlist.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+    
 # Step 7: Main function
 def main():
     playlists = get_user_playlist()
-    display_playlists(playlists)
+    selected_playlist = select_playlist(playlists)
+    display_playlist_info(selected_playlist)
 
 if __name__ == '__main__':
     main()
+
+# Step 8: Display information about the selected playlist
+def display_playlist_info(playlist):
+    print("\nPlaylist Infomration: ")
+    print(f"Name: {playlist['name']}")
+    print(f"Number of Tracks: {playlist['tracks']['total']}")

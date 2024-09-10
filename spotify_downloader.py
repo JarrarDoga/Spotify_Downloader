@@ -1,7 +1,7 @@
 # Import necessary libraries
 import os
 import spotipy
-import yt_dlp as youtube_dl
+import yt_dlp as youtube_dl # youtube_dl library doesn't work so we import yt_dlp and instead of changing the whole file, we just do import as
 from spotipy.oauth2 import SpotifyOAuth
 
 # Define the Spotify API credentials
@@ -10,12 +10,13 @@ client_secret = 'your_client_secret'
 redirect_uri = 'http://localhost:8888/callback'
 
 # Authenticate with the Spotify API
-scope = 'playlist-read-private'
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=client_id,client_secret=client_secret,redirect_uri=redirect_uri,scope=scope))
+scope = 'playlist-read-private'      # Created .cache file upon first run of the program, to reset api, delete the .cache first
+sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri, scope=scope))
 
+ 
 # Retrieve the user's playlists
 def get_user_playlist():
-    playlists =sp.current_user_playlists()
+    playlists = sp.current_user_playlists()
     return playlists['items']
 
 # Display the user's playlists
@@ -34,25 +35,22 @@ def select_playlist(playlists):
         except ValueError:
             print("Invalid input. Please enter a number.")
     
-# Retrieve information about each song in the playlist (updated name)
+# Retrieve information about each song in the playlist
 def get_playlist_songs(playlist_id):
     tracks = sp.playlist_tracks(playlist_id)
     return tracks['items']
 
 
-
-
-# Function to display information about the selected playlist
-def display_playlist_info(playlist):
+# Function to display basic information about the selected playlist
+def display_playlist_info_basic(playlist):
     print("Playlist Name:", playlist['name'])
     print("Total Tracks:", playlist['tracks']['total'])
 
-# Display information about the selected playlist
-def display_playlist_info(playlist):
-    print("\nPlaylist Infomration: ")
+# Function to display detailed information about the selected playlist
+def display_playlist_info_detailed(playlist):
+    print("\nPlaylist Information: ")
     print(f"Name: {playlist['name']}")
     print(f"Number of Tracks: {playlist['tracks']['total']}")
-
 
 # Display information about each song
 def display_track_info(tracks):
@@ -108,7 +106,6 @@ def download_audio_files(tracks):
 
     return download_folder # Return the download folder
 
-
 # Prompt the user for folder and set download location
 def prompt_for_download_folder():
     while True:
@@ -117,12 +114,6 @@ def prompt_for_download_folder():
             return folder_path
         else: 
             print("Invalid folder path. Please enter a valid directory.")
-
-
-# Create a folder to store downloaded songs
-def create_download_folder():
-    folder_path = prompt_for_download_folder()
-    return folder_path
 
 # List downloaded songs in the specified folder
 def list_downloaded_songs(folder_path):
@@ -135,8 +126,8 @@ def list_downloaded_songs(folder_path):
 def main():
     playlists = get_user_playlist()
     selected_playlist = select_playlist(playlists)
-    display_playlist_info(selected_playlist)
-    playlist_tracks = get_playlist_songs(selected_playlist['id'])  # Use the corrected function name
+    display_playlist_info_basic(selected_playlist)
+    playlist_tracks = get_playlist_songs(selected_playlist['id'])
     display_track_info(playlist_tracks)
     download_folder = download_audio_files(playlist_tracks)
     list_downloaded_songs(download_folder)

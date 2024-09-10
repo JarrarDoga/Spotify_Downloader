@@ -11,4 +11,5 @@ What the function can do currently:
 6. List all the downloaded songs in the specified folder.
 7. Handle cases where songs fail to download or are not found on Youtube.
 
+** pip install spotipy, yt-dlp **
 ** For client_id and client_secret on line 8 and 9, open a spotify dev account, create an application and copy and paste your client ID and client secret, make sure to also match Redirect URIs **

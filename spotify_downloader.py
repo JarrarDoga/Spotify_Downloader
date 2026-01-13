@@ -1,8 +1,14 @@
-# Import necessary libraries
 import os
 import spotipy
-import yt_dlp as youtube_dl # youtube_dl library doesn't work so we import yt_dlp and instead of changing the whole file, we just do import as
+import yt_dlp as youtube_dl
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
 from spotipy.oauth2 import SpotifyOAuth
+from PIL import Image, ImageTk
+import requests
+from io import BytesIO
+import threading
+import platform
 
 # Define the Spotify API credentials
 client_id = 'your_client_id'
@@ -10,57 +16,40 @@ client_secret = 'your_client_secret'
 redirect_uri = 'http://localhost:8888/callback'
 
 # Authenticate with the Spotify API
-scope = 'playlist-read-private'      # Created .cache file upon first run of the program, to reset api, delete the .cache first
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri, scope=scope))
+scope = 'user-read-private user-library-read playlist-read-private'
+sp = spotipy.Spotify(
+    auth_manager=SpotifyOAuth(client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri, scope=scope))
 
- 
-# Retrieve the user's playlists
+# Global variables to store playlists and albums
+playlists = []
+albums = []
+filtered_items = []
+selected_item_index = None
+current_view = "playlists"  # Track whether we're showing playlists or albums
+
 def get_user_playlist():
     playlists = sp.current_user_playlists()
     return playlists['items']
 
-# Display the user's playlists
-def select_playlist(playlists):
-    print("Your Spotify Playlists: ")
-    for index, playlist in enumerate(playlists, start=1):
-        print(f"{index}. {playlist['name']}")
+def get_user_albums():
+    albums = []
+    results = sp.current_user_saved_albums()
+    albums.extend(results['items'])
     
-    while True:
-        try:
-            choice = int(input("\nPlease enter the number of the playlist you want to select: "))
-            if 1 <= choice <= len(playlists):
-                return playlists[choice -1]
-            else:
-                print("Invalid choice. Please enter a number corresponding to the playlist.")
-        except ValueError:
-            print("Invalid input. Please enter a number.")
+    while results['next']:
+        results = sp.next(results)
+        albums.extend(results['items'])
     
-# Retrieve information about each song in the playlist
+    return albums
+
 def get_playlist_songs(playlist_id):
     tracks = sp.playlist_tracks(playlist_id)
     return tracks['items']
 
+def get_album_songs(album_id):
+    tracks = sp.album_tracks(album_id)
+    return [{'track': track} for track in tracks['items']]
 
-# Function to display basic information about the selected playlist
-def display_playlist_info_basic(playlist):
-    print("Playlist Name:", playlist['name'])
-    print("Total Tracks:", playlist['tracks']['total'])
-
-# Function to display detailed information about the selected playlist
-def display_playlist_info_detailed(playlist):
-    print("\nPlaylist Information: ")
-    print(f"Name: {playlist['name']}")
-    print(f"Number of Tracks: {playlist['tracks']['total']}")
-
-# Display information about each song
-def display_track_info(tracks):
-    print("\nTrack Information:")
-    for index, track in enumerate(tracks, start=1):
-        track_name = track['track']['name']
-        artists = ', '.join([artist['name'] for artist in track['track']['artists']])
-        print(f"{index}. {track_name} - {artists}")
-
-# Search for each song on Youtube
 def search_song_on_youtube(song_name, artist_names):
     search_query = f"{song_name} {', '.join(artist_names)} audio"
     ydl_opts = {
@@ -78,59 +67,223 @@ def search_song_on_youtube(song_name, artist_names):
         else:
             return None
 
-# Download audio files for each song
-def download_audio_files(tracks):
-    download_folder = prompt_for_download_folder()
-    os.chdir(download_folder) # Change current working directory to the download folder
-    failed_songs = []  # List to keep track of failed songs
-    for track in tracks:
+def download_audio_files(tracks, download_folder):
+    os.chdir(download_folder)
+    failed_songs = []
+    total_tracks = len(tracks)
+
+    for i, track in enumerate(tracks, 1):
         track_name = track['track']['name']
         artists = [artist['name'] for artist in track['track']['artists']]
         video_id = search_song_on_youtube(track_name, artists)
+
+        status_var.set(f"Downloading {i}/{total_tracks}: {track_name}")
+        progress_bar['value'] = (i / total_tracks) * 100
+        root.update_idletasks()
+
         if video_id:
-            print(f"Downloading {track_name}...")
             with youtube_dl.YoutubeDL({'format': 'bestaudio'}) as ydl:
                 try:
                     ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
                 except Exception as e:
-                    print(f"Failed to download {track_name}: {str(e)}")
                     failed_songs.append(track_name)
         else:
-            print(f"No audio found for {track_name}")
             failed_songs.append(track_name)
-    
+
+    status_var.set("Download completed")
+    progress_bar['value'] = 100
+
     if failed_songs:
-        print("\nFailed to download the following songs:")
-        for song in failed_songs:
-            print(song)
+        messagebox.showwarning("Failed Downloads", f"Could not download the following songs: {', '.join(failed_songs)}")
+    else:
+        messagebox.showinfo("Success", "All songs downloaded successfully!")
 
-    return download_folder # Return the download folder
+def update_listbox(search_term=""):
+    global selected_item_index, filtered_items
+    items = playlists if current_view == "playlists" else albums
+    filtered_items = [item for item in items if search_term.lower() in (item['name'].lower() if current_view == "playlists" else item['album']['name'].lower())]
+    
+    for widget in listbox_frame.winfo_children():
+        widget.destroy()
 
-# Prompt the user for folder and set download location
-def prompt_for_download_folder():
-    while True:
-        folder_path = input("Enter the folder path where you want to save the downloaded songs: ")
-        if os.path.exists(folder_path) and os.path.isdir(folder_path):
-            return folder_path
-        else: 
-            print("Invalid folder path. Please enter a valid directory.")
+    for index, item in enumerate(filtered_items, start=1):
+        frame = tk.Frame(listbox_frame, bg="#191414")
+        frame.pack(fill=tk.X, pady=2)
 
-# List downloaded songs in the specified folder
-def list_downloaded_songs(folder_path):
-    print("\nDownloaded Songs: ")
-    songs = os.listdir(folder_path)
-    for song in songs:
-        print(song)
+        if current_view == "playlists":
+            image_url = item['images'][0]['url'] if item['images'] else None
+            name = item['name']
+        else:
+            image_url = item['album']['images'][0]['url'] if item['album']['images'] else None
+            name = item['album']['name']
 
-# Main function (updated call)
-def main():
-    playlists = get_user_playlist()
-    selected_playlist = select_playlist(playlists)
-    display_playlist_info_basic(selected_playlist)
-    playlist_tracks = get_playlist_songs(selected_playlist['id'])
-    display_track_info(playlist_tracks)
-    download_folder = download_audio_files(playlist_tracks)
-    list_downloaded_songs(download_folder)
+        if image_url:
+            img = load_image_from_url(image_url, (40, 40))
+            img_label = tk.Label(frame, image=img, bg="#191414")
+            img_label.image = img
+            img_label.pack(side=tk.LEFT, padx=5)
 
-if __name__ == '__main__':
-    main()
+        label = tk.Label(frame, text=name, bg="#191414", fg="white", anchor="w")
+        label.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        label.bind("<Button-1>", lambda e, idx=index - 1: on_item_click(idx))
+
+    listbox_frame.update_idletasks()
+    canvas.configure(scrollregion=canvas.bbox("all"))
+    selected_item_index = None
+
+def toggle_view():
+    global current_view, filtered_items
+    current_view = "albums" if current_view == "playlists" else "playlists"
+    toggle_button.config(text="Show Playlists" if current_view == "albums" else "Show Albums")
+    if current_view == "albums":
+        albums.clear()
+        albums.extend(get_user_albums())
+    else:
+        playlists.clear()
+        playlists.extend(get_user_playlist())
+    update_listbox()
+
+def on_item_click(index):
+    global selected_item_index
+    selected_item_index = index
+
+    for frame in listbox_frame.winfo_children():
+        for child in frame.winfo_children():
+            if isinstance(child, tk.Label) and child.cget("text"):
+                child.configure(bg="#191414", fg="white", font=("TkDefaultFont", 9, "normal"))
+
+    selected_frame = listbox_frame.winfo_children()[index]
+    for child in selected_frame.winfo_children():
+        if isinstance(child, tk.Label) and child.cget("text"):
+            child.configure(bg="#191414", fg="#1DB954", font=("TkDefaultFont", 9, "underline"))
+
+def on_item_select():
+    global selected_item_index
+    if selected_item_index is not None:
+        selected_item = filtered_items[selected_item_index]
+        
+        if current_view == "playlists":
+            tracks = get_playlist_songs(selected_item['id'])
+        else:
+            tracks = get_album_songs(selected_item['album']['id'])
+
+        download_folder = filedialog.askdirectory(title="Select Download Folder")
+
+        if download_folder:
+            threading.Thread(target=download_audio_files, args=(tracks, download_folder)).start()
+    else:
+        messagebox.showerror("No Selection", "Please select a playlist or album to download songs from.")
+
+def load_image_from_url(url, size):
+    response = requests.get(url)
+    img = Image.open(BytesIO(response.content))
+    img = img.resize(size, Image.LANCZOS)
+    return ImageTk.PhotoImage(img)
+
+# Tkinter Setup
+root = tk.Tk()
+root.title("Spotify Downloader")
+root.geometry("300x600")
+root.configure(bg="#191414")
+
+# Create and configure widgets
+label = tk.Label(root, text="Select Music to Download", bg="#191414", fg="white",
+                 padx=5, pady=5, font=("TkDefaultFont", 10, "bold"))
+label.pack(pady=10)
+
+# Add the toggle button after root is created
+toggle_button = ttk.Button(root, text="Show Albums", command=toggle_view, style="TButton")
+toggle_button.pack(pady=5)
+
+# Create a frame for the listbox and scrollbar
+list_frame = tk.Frame(root, bg="#191414", bd=0)
+list_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+
+# Create a canvas to hold the listbox frame
+canvas = tk.Canvas(list_frame, bg="#191414", highlightthickness=0, width=280)
+canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+# Add a scrollbar to the canvas
+scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
+scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+canvas.configure(yscrollcommand=scrollbar.set)
+
+# Create a frame inside the canvas to hold the listbox items
+listbox_frame = tk.Frame(canvas, bg="#191414")
+canvas_window = canvas.create_window((0, 0), window=listbox_frame, anchor="nw", width=280)
+
+# Configure the canvas scrolling
+def on_frame_configure(event):
+    canvas.configure(scrollregion=canvas.bbox("all"))
+    
+listbox_frame.bind("<Configure>", on_frame_configure)
+
+# Configure mouse wheel scrolling
+def on_mousewheel(event):
+    if platform.system() == "Windows":
+        canvas.yview_scroll(int(-1 * (event.delta/120)), "units")
+    elif platform.system() == "Darwin":  # macOS
+        canvas.yview_scroll(int(-1 * event.delta), "units")
+    else:  # Linux
+        if event.num == 4:
+            canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            canvas.yview_scroll(1, "units")
+
+# Bind mouse wheel for Windows and macOS
+canvas.bind_all("<MouseWheel>", on_mousewheel)
+# Bind mouse wheel for Linux
+canvas.bind_all("<Button-4>", on_mousewheel)
+canvas.bind_all("<Button-5>", on_mousewheel)
+
+# Configure canvas scrolling with scrollbar
+def on_canvas_configure(event):
+    canvas.configure(scrollregion=canvas.bbox("all"))
+
+canvas.bind("<Configure>", on_canvas_configure)
+
+# Make sure the listbox frame expands to fill the canvas width
+def on_canvas_configure(event):
+    canvas.itemconfig(canvas_window, width=event.width)
+
+canvas.bind("<Configure>", on_canvas_configure)
+# Create a custom style for buttons
+style = ttk.Style()
+style.theme_use('clam')
+style.configure("TButton", padding=6, relief="flat", background="#1DB954", foreground="white")
+style.configure("TProgressbar", troughcolor='#191414', background='#1db1b9', thickness=20)
+style.map("TButton",
+          foreground=[('pressed', 'white'), ('active', 'white')],
+          background=[('pressed', '#1ED760'), ('active', '#1ED760')]
+          )
+
+# Add a custom button with style
+download_button = ttk.Button(root, text="Download Selected Music", command=on_item_select, style="TButton")
+download_button.pack(pady=10)
+
+# Add a search bar
+search_frame = tk.Frame(root, bg="#191414")
+search_frame.pack(pady=5)
+
+search_var = tk.StringVar()
+search_entry = ttk.Entry(search_frame, textvariable=search_var, width=20)
+search_entry.pack(side=tk.LEFT, padx=5)
+
+search_button = ttk.Button(search_frame, text="Search", command=lambda: update_listbox(search_var.get()), style="TButton", width=10)
+search_button.pack(side=tk.LEFT)
+
+# Add a progress bar
+progress_bar = ttk.Progressbar(root, orient="horizontal", length=280, mode="determinate")
+progress_bar.pack(pady=10)
+
+status_var = tk.StringVar()
+status_label = tk.Label(root, textvariable=status_var, bg="#191414", fg="#fae22a")
+status_label.pack(pady=10)
+
+# Load the user's playlists at startup
+playlists.extend(get_user_playlist())
+update_listbox()
+
+# Run the Tkinter event loop
+root.mainloop()
